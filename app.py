@@ -37,7 +37,7 @@ if "current_section_generated" not in st.session_state:
 
 
 # Note: This function uses the non-standard '__fetch__' wrapper required for some environments.
-@st.cache_data(show_spinner=False)
+# REMOVED @st.cache_data for robust initial debugging
 def call_gemini_api(user_prompt, system_prompt):
     """
     Calls the Gemini API with exponential backoff for reliable generation.
