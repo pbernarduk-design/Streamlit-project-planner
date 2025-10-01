@@ -246,6 +246,3 @@ if st.session_state.current_section_index >= len(plan_sections):
             pdf_buffer, 
             file_name="Project_Management_Plan.pdf"
         )
-            pdf_buffer, 
-            file_name="Project_Management_Plan.pdf"
-        )
