@@ -1,4 +1,3 @@
-
 import streamlit as st
 from docx import Document
 from docx.shared import Inches
@@ -13,16 +12,6 @@ GEMINI_API_KEY = ""
 GEMINI_MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent?key={GEMINI_API_KEY}"
 
-# Initialize session state
-if "section_2_1" not in st.session_state:
-    st.session_state.section_2_1 = ""
-if "sections" not in st.session_state:
-    st.session_state.sections = {}
-if "suggestions_loaded" not in st.session_state:
-    st.session_state.suggestions_loaded = False
-if "ai_status" not in st.session_state:
-    st.session_state.ai_status = ""
-
 # Define sections of the project management plan
 plan_sections = [
     "Executive Summary",
@@ -32,6 +21,20 @@ plan_sections = [
     "Governance & Team",
     "Risk Management"
 ]
+
+# --- Initialize Session State ---
+if "section_2_1" not in st.session_state:
+    st.session_state.section_2_1 = ""
+if "sections" not in st.session_state:
+    st.session_state.sections = {section: "" for section in plan_sections}
+if "ai_status" not in st.session_state:
+    st.session_state.ai_status = ""
+# New state variables for sequential flow
+if "current_section_index" not in st.session_state:
+    st.session_state.current_section_index = 0
+if "current_section_generated" not in st.session_state:
+    st.session_state.current_section_generated = False
+
 
 # Note: This function uses the non-standard '__fetch__' wrapper required for some environments.
 @st.cache_data(show_spinner=False)
@@ -107,35 +110,37 @@ def generate_ai_suggestion(section_title, description):
     content = call_gemini_api(user_prompt, system_prompt)
     return content
 
-# Function to run the AI suggestions for all sections
-def run_all_ai_suggestions():
-    """
-    Generates AI content for all sections that are currently empty placeholders.
-    """
-    if st.session_state.section_2_1 and not st.session_state.suggestions_loaded:
-        st.session_state.ai_status = "Generating suggestions..."
-        for section in plan_sections:
-            with st.spinner(f"Generating content for: {section}..."):
-                # Only generate if the content is still the default placeholder (or uninitialized)
-                default_placeholder = f"Suggested content for {section} based on project description: '{st.session_state.section_2_1}'."
-                
-                if section not in st.session_state.sections or st.session_state.sections[section] == default_placeholder:
-                    ai_content = generate_ai_suggestion(section, st.session_state.section_2_1)
-                    st.session_state.sections[section] = ai_content
-        
-        st.session_state.suggestions_loaded = True
-        st.session_state.ai_status = "Suggestions loaded successfully!"
-        # This rerun is necessary to refresh the text areas with the new AI content
-        st.rerun()
-    elif st.session_state.suggestions_loaded:
-        st.session_state.ai_status = "Suggestions have already been loaded. Edit content above."
-    elif not st.session_state.section_2_1:
+# Callback function to generate content for the current section
+def run_current_ai_suggestion():
+    if not st.session_state.section_2_1:
         st.session_state.ai_status = "Please enter a Project Description first (Step 1)."
+        return
         
+    current_section = plan_sections[st.session_state.current_section_index]
+    st.session_state.ai_status = f"Generating content for: {current_section}..."
+    
+    with st.spinner(f"Generating content for: {current_section}..."):
+        ai_content = generate_ai_suggestion(current_section, st.session_state.section_2_1)
+        st.session_state.sections[current_section] = ai_content
+        st.session_state.current_section_generated = True
+        st.session_state.ai_status = f"Suggestion loaded for {current_section}."
+        
+# Callback function to accept content and move to the next section
+def accept_and_move_next():
+    # Only move forward if we are not on the last section
+    if st.session_state.current_section_index < len(plan_sections) - 1:
+        st.session_state.current_section_index += 1
+        st.session_state.current_section_generated = False
+        st.session_state.ai_status = ""
+    else:
+        # We are on the last section, mark flow as complete
+        st.session_state.current_section_index = len(plan_sections) # Set index to one past the last section
+        st.session_state.ai_status = "All sections are complete! Proceed to Step 3 & 4."
+
 
 # App layout
 st.title("📄 Project Management Plan Generator")
-st.markdown("Use this tool to draft the core sections of your Project Management Plan and export them to Word or PDF. **AI is enabled to provide smart suggestions based on your project description.**")
+st.markdown("Use this interactive tool to draft your Project Management Plan **one section at a time** using AI-generated suggestions, then refine and export.")
 
 st.header("Step 1: Enter Project Description")
 st.session_state.section_2_1 = st.text_area(
@@ -144,37 +149,50 @@ st.session_state.section_2_1 = st.text_area(
     height=150
 )
 
-# Initialize sections with basic placeholders if they haven't been loaded yet
-if st.session_state.section_2_1:
-    if not st.session_state.suggestions_loaded:
-        for section in plan_sections:
-            if section not in st.session_state.sections:
-                 st.session_state.sections[section] = f"Suggested content for {section} based on project description: '{st.session_state.section_2_1}'."
-
-
-if st.session_state.section_2_1:
-    st.header("Step 2: Generate AI Content and Edit")
+# --- Sequential Generation and Refinement (Step 2) ---
+if st.session_state.section_2_1 and st.session_state.current_section_index < len(plan_sections):
     
-    # Button to trigger AI generation
-    st.button("Generate AI Suggestions for All Sections", on_click=run_all_ai_suggestions)
+    current_section = plan_sections[st.session_state.current_section_index]
+    
+    st.header(f"Step 2: Refine Section {st.session_state.current_section_index + 1}/{len(plan_sections)}: {current_section}")
+    
+    if not st.session_state.current_section_generated:
+        st.button(f"Generate AI Suggestion for {current_section}", on_click=run_current_ai_suggestion)
     
     if st.session_state.ai_status:
         st.info(st.session_state.ai_status)
     
-    # Display editable text areas for each plan section
-    for section in plan_sections:
-        st.subheader(section)
-            
-        edited_text = st.text_area(
-            f"Content for {section}", 
-            st.session_state.sections.get(section, ""), # Use .get for safety
-            key=section,
-            height=200
+    # Display editable text area for the current section
+    # Use a unique key to prevent content confusion on index change
+    edited_text = st.text_area(
+        f"Content for {current_section}", 
+        st.session_state.sections.get(current_section, ""), 
+        key=f"editor_{current_section}",
+        height=300,
+        disabled=(not st.session_state.current_section_generated) # Disable editing until content is generated
+    )
+    st.session_state.sections[current_section] = edited_text
+    
+    if st.session_state.current_section_generated:
+        
+        # Checkbox to accept the content
+        accepted = st.checkbox(
+            f"Accept Content for **{current_section}** (Ready to move to next section)",
+            key=f"accept_{current_section}"
         )
-        st.session_state.sections[section] = edited_text
+        
+        if accepted:
+            st.button(
+                f"✅ Accept & Move to Next Section", 
+                on_click=accept_and_move_next,
+                type="primary"
+            )
 
+# --- Final Steps (Step 3 & 4) ---
+if st.session_state.current_section_index >= len(plan_sections):
+    
     st.header("Step 3: Preview Final Document")
-    with st.expander("Click to view full preview"):
+    with st.expander("Click to view full, completed plan preview"):
         st.markdown(f"## Project Management Plan")
         st.markdown(f"**Project Description:**\n{st.session_state.section_2_1}")
         for section in plan_sections:
@@ -207,7 +225,6 @@ if st.session_state.section_2_1:
         )
 
     # --- Export to PDF (.pdf) ---
-    # Note: PyMuPDF (fitz) is used here for simple text export.
     if st.button("Export to PDF (.pdf)"):
         pdf_buffer = io.BytesIO()
         doc = fitz.open()
@@ -226,6 +243,9 @@ if st.session_state.section_2_1:
         
         st.download_button(
             "Download PDF Document", 
+            pdf_buffer, 
+            file_name="Project_Management_Plan.pdf"
+        )
             pdf_buffer, 
             file_name="Project_Management_Plan.pdf"
         )
