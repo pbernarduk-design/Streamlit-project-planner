@@ -49,10 +49,9 @@ if st.session_state.section_2_1:
     # Export to Word
     if st.button("Export to Word"):
         doc = Document()
-        doc.add_picture("logo.png", width=Inches(1.5))
+        # Removed the problematic line: doc.add_picture("logo.png", width=Inches(1.5))
         doc.add_heading("Project Management Plan", level=1)
-        doc.add_paragraph(f"Project Description:
-{st.session_state.section_2_1}")
+        doc.add_paragraph(f"Project Description:\n{st.session_state.section_2_1}")
         for section in plan_sections:
             doc.add_heading(section, level=2)
             doc.add_paragraph(st.session_state.sections[section])
