@@ -53,7 +53,6 @@ def call_gemini_api(user_prompt, system_prompt):
     for attempt in range(max_retries):
         try:
             # We use the native fetch API available in the Canvas environment
-            # Simplified exception handling structure to catch network/fetch errors broadly
             response = st.runtime.scriptrunner.add_script_run_ctx(
                 lambda: st.runtime.scriptrunner.add_script_run_ctx(
                     lambda: __fetch__(GEMINI_API_URL, {
@@ -63,6 +62,9 @@ def call_gemini_api(user_prompt, system_prompt):
                     })
                 )()
             )()
+            
+            # Print status code for debugging in the Streamlit console
+            print(f"API Attempt {attempt + 1}: Status Code {response.status_code}")
             
             # Check for HTTP status code errors first
             if response.status_code == 429:
@@ -77,6 +79,12 @@ def call_gemini_api(user_prompt, system_prompt):
 
             # Process successful response
             result = response.json()
+            
+            # Check if the result JSON is valid and contains candidates
+            if not result.get('candidates'):
+                # This catches responses that are OK but empty or malformed
+                return "API returned a successful status, but no content (candidates) was found in the response."
+
             candidate = result.get('candidates', [{}])[0]
             
             if candidate and candidate.get('content', {}).get('parts', [{}])[0].get('text'):
@@ -92,7 +100,7 @@ def call_gemini_api(user_prompt, system_prompt):
             else:
                 # Final logging of the error
                 print(f"Failed to call Gemini API after {max_retries} attempts. Last Error: {e}")
-                return "AI suggestion failed due to an underlying API or network error. Please ensure your project description is complete and try again."
+                return f"AI suggestion failed: {str(e)[:100]}. Please ensure your project description is complete and try again."
 
     return "AI suggestion failed to complete."
 
