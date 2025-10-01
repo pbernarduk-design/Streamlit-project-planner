@@ -53,6 +53,7 @@ def call_gemini_api(user_prompt, system_prompt):
     for attempt in range(max_retries):
         try:
             # We use the native fetch API available in the Canvas environment
+            # Simplified exception handling structure to catch network/fetch errors broadly
             response = st.runtime.scriptrunner.add_script_run_ctx(
                 lambda: st.runtime.scriptrunner.add_script_run_ctx(
                     lambda: __fetch__(GEMINI_API_URL, {
@@ -63,20 +64,25 @@ def call_gemini_api(user_prompt, system_prompt):
                 )()
             )()
             
-            # Check for API errors
+            # Check for HTTP status code errors first
             if response.status_code == 429:
                 raise Exception("Rate limit exceeded.")
             if not response.ok:
-                error_detail = response.json().get("error", {}).get("message", "Unknown API error")
+                try:
+                    error_json = response.json()
+                    error_detail = error_json.get("error", {}).get("message", "Unknown API error structure.")
+                except:
+                    error_detail = "API returned an error status but no readable JSON."
                 raise Exception(f"API Error ({response.status_code}): {error_detail}")
 
+            # Process successful response
             result = response.json()
             candidate = result.get('candidates', [{}])[0]
             
             if candidate and candidate.get('content', {}).get('parts', [{}])[0].get('text'):
                 return candidate['content']['parts'][0]['text']
             
-            return "Failed to generate content. Please check the API response structure."
+            return "Failed to extract content from the API response structure."
 
         except Exception as e:
             if attempt < max_retries - 1:
@@ -84,9 +90,9 @@ def call_gemini_api(user_prompt, system_prompt):
                 time.sleep(delay)
                 delay *= 2
             else:
-                # Log error to console, but return a user-friendly message
-                print(f"Failed to call Gemini API after {max_retries} attempts. Error: {e}")
-                return "AI suggestion failed due to API error. Please enter content manually."
+                # Final logging of the error
+                print(f"Failed to call Gemini API after {max_retries} attempts. Last Error: {e}")
+                return "AI suggestion failed due to an underlying API or network error. Please ensure your project description is complete and try again."
 
     return "AI suggestion failed to complete."
 
